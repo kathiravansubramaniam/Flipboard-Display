@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome Home Ramya</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --tile-gap: clamp(3px, 0.5vw, 8px);
+            --board-pad: clamp(16px, 3vw, 60px);
+            --text-color: #efefef;
+            --accent: #e8413c;
+            --divider-shadow: #1a1a1a;
+            --divider-highlight: #4a4a4a;
+            --board-ratio: 1.35;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            background: radial-gradient(ellipse at 50% 40%, #1e1e1e 0%, #0d0d0d 70%, #050505 100%);
+            font-family: 'Bebas Neue', 'Arial Narrow', sans-serif;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg, transparent, transparent 2px,
+                rgba(0, 0, 0, 0.03) 2px, rgba(0, 0, 0, 0.03) 4px
+            );
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* ---- Config Button ---- */
+        .config-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.4);
+            font-size: 1.6rem;
+            font-family: 'DM Sans', system-ui, sans-serif;
+            font-weight: 300;
+            cursor: pointer;
+            z-index: 150;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            line-height: 1;
+        }
+        .config-btn:hover {
+            background: rgba(255,255,255,0.14);
+            color: #fff;
+            border-color: rgba(255,255,255,0.25);
+            transform: rotate(90deg) scale(1.05);
+        }
+
+        /* ---- Board ---- */
+        .board-wrapper {
+            width: 100%;
+            height: 100vh;
+            padding: var(--board-pad);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .board {
+            display: grid;
+            gap: var(--tile-gap);
+            width: min(100%, calc((100vh - var(--board-pad) * 2) * var(--board-ratio)));
+            background: #181818;
+            padding: var(--tile-gap);
+            border-radius: clamp(4px, 0.5vw, 8px);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.04),
+                0 8px 32px rgba(0,0,0,0.6),
+                0 2px 8px rgba(0,0,0,0.4),
+                inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        .tile {
+            position: relative;
+            aspect-ratio: 0.72;
+            perspective: 500px;
+            border-radius: clamp(3px, 0.4vw, 6px);
+            container-type: inline-size;
+        }
+
+        .tile-half {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 50%;
+            overflow: hidden;
+        }
+
+        .tile-top {
+            top: 0;
+            background: linear-gradient(180deg, #3e3e3e 0%, #353535 100%);
+            border-radius: clamp(3px, 0.4vw, 6px) clamp(3px, 0.4vw, 6px) 0 0;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 -1px 3px rgba(0,0,0,0.3);
+        }
+        .tile-top::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 1px;
+            background: var(--divider-shadow);
+            box-shadow: 0 1px 0 rgba(255,255,255,0.04);
+        }
+
+        .tile-bottom {
+            bottom: 0;
+            background: linear-gradient(180deg, #303030 0%, #282828 100%);
+            border-radius: 0 0 clamp(3px, 0.4vw, 6px) clamp(3px, 0.4vw, 6px);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 2px 4px rgba(0,0,0,0.4);
+        }
+        .tile-bottom::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: var(--divider-highlight);
+            opacity: 0.3;
+        }
+
+        .tile-char {
+            position: absolute;
+            width: 100%;
+            height: 200%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-color);
+            font-size: 75cqi;
+            letter-spacing: 0.04em;
+            user-select: none;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+
+        .tile-top .tile-char { top: 0; }
+        .tile-bottom .tile-char { bottom: 0; }
+
+        .tile.heart .tile-char {
+            color: var(--accent);
+            text-shadow: 0 0 20px rgba(232,65,60,0.5), 0 0 40px rgba(232,65,60,0.2);
+        }
+        .tile.heart.settled .tile-char {
+            animation: heartPulse 1.8s ease-in-out infinite;
+        }
+
+        @keyframes heartPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        /* ---- Flap elements ---- */
+        .flap {
+            position: absolute;
+            left: 0; width: 100%; height: 50%;
+            overflow: hidden;
+            z-index: 10;
+            display: none;
+        }
+        .flap .tile-char {
+            position: absolute;
+            width: 100%; height: 200%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .flap-top {
+            top: 0;
+            transform-origin: center bottom;
+            background: linear-gradient(180deg, #3e3e3e 0%, #353535 100%);
+            border-radius: clamp(3px, 0.4vw, 6px) clamp(3px, 0.4vw, 6px) 0 0;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+        }
+        .flap-top .tile-char { top: 0; }
+        .flap-top.flipping {
+            display: block;
+            animation: flapDown var(--flip-speed, 120ms) ease-in forwards;
+        }
+        .flap-top.flipping::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.25));
+            animation: shadowIn var(--flip-speed, 120ms) ease-in forwards;
+        }
+
+        .flap-bottom {
+            bottom: 0;
+            transform-origin: center top;
+            background: linear-gradient(180deg, #303030 0%, #282828 100%);
+            border-radius: 0 0 clamp(3px, 0.4vw, 6px) clamp(3px, 0.4vw, 6px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        }
+        .flap-bottom .tile-char { bottom: 0; }
+        .flap-bottom.flipping {
+            display: block;
+            animation: flapUp var(--flip-speed, 120ms) ease-out forwards;
+        }
+
+        @keyframes flapDown {
+            0%   { transform: rotateX(0deg); }
+            100% { transform: rotateX(-90deg); }
+        }
+        @keyframes flapUp {
+            0%   { transform: rotateX(90deg); }
+            100% { transform: rotateX(0deg); }
+        }
+        @keyframes shadowIn {
+            0%   { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        .tile::before, .tile::after {
+            content: '';
+            position: absolute;
+            width: clamp(2px, 0.3vw, 4px);
+            height: clamp(4px, 0.6vw, 8px);
+            background: #222;
+            border-radius: 1px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 20;
+        }
+        .tile::before { left: clamp(1px, 0.15vw, 3px); }
+        .tile::after  { right: clamp(1px, 0.15vw, 3px); }
+
+        /* ============ MODAL ============ */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal-card {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 16px;
+            width: min(92vw, 640px);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.7);
+            transform: translateY(16px) scale(0.97);
+            transition: transform 0.25s ease;
+        }
+        .modal-overlay.open .modal-card {
+            transform: translateY(0) scale(1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 22px 28px 18px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .modal-header h2 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            color: #ddd;
+            letter-spacing: 0.15em;
+            font-weight: 400;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 1.6rem;
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 6px;
+            transition: color 0.2s, background 0.2s;
+            line-height: 1;
+        }
+        .modal-close:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.08);
+        }
+
+        .modal-body {
+            padding: 24px 28px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .size-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .size-field label {
+            display: block;
+            font-family: 'DM Sans', system-ui, sans-serif;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #777;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .stepper {
+            display: flex;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+        .step-btn {
+            background: #2a2a2a;
+            border: none;
+            color: #aaa;
+            width: 38px;
+            height: 38px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            font-family: 'DM Sans', system-ui, sans-serif;
+        }
+        .step-btn:hover { background: #3a3a3a; color: #fff; }
+        .step-btn:active { background: #444; }
+        .stepper input[type="number"] {
+            width: 52px;
+            height: 38px;
+            text-align: center;
+            background: #1a1a1a;
+            border: none;
+            border-left: 1px solid #333;
+            border-right: 1px solid #333;
+            color: #eee;
+            font-size: 1rem;
+            font-family: 'DM Sans', system-ui, sans-serif;
+            font-weight: 600;
+            -moz-appearance: textfield;
+        }
+        .stepper input::-webkit-outer-spin-button,
+        .stepper input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+        }
+
+        .grid-editor {
+            display: grid;
+            gap: 4px;
+            margin-bottom: 20px;
+        }
+        .grid-cell {
+            aspect-ratio: 1;
+            max-width: 48px;
+            background: #2a2a2a;
+            border: 1.5px solid #3a3a3a;
+            border-radius: 6px;
+            color: #eee;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.15rem;
+            text-align: center;
+            text-transform: uppercase;
+            outline: none;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+            padding: 0;
+            width: 100%;
+        }
+        .grid-cell:focus {
+            border-color: var(--accent);
+            background: #2f2222;
+            box-shadow: 0 0 0 3px rgba(232,65,60,0.2);
+        }
+        .grid-cell::placeholder {
+            color: #444;
+            font-family: 'DM Sans', system-ui, sans-serif;
+            font-size: 0.65rem;
+        }
+
+        .emoji-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .emoji-bar-label {
+            font-family: 'DM Sans', system-ui, sans-serif;
+            font-size: 0.7rem;
+            color: #555;
+            margin-right: 2px;
+            font-weight: 500;
+        }
+        .emoji-btn {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            width: 34px;
+            height: 34px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, border-color 0.15s, transform 0.1s;
+        }
+        .emoji-btn:hover {
+            background: #3a3a3a;
+            border-color: #555;
+            transform: scale(1.1);
+        }
+        .emoji-btn:active { transform: scale(0.95); }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 16px 28px 22px;
+            border-top: 1px solid #2a2a2a;
+        }
+        .btn {
+            padding: 10px 28px;
+            border-radius: 8px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.05rem;
+            letter-spacing: 0.12em;
+            cursor: pointer;
+            border: none;
+            transition: background 0.15s, transform 0.1s;
+        }
+        .btn:active { transform: scale(0.96); }
+        .btn-cancel {
+            background: #2a2a2a;
+            color: #999;
+            border: 1px solid #3a3a3a;
+        }
+        .btn-cancel:hover { background: #3a3a3a; color: #fff; }
+        .btn-apply {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-apply:hover { background: #d33; }
+    </style>
+</head>
+<body>
+
+    <button class="config-btn" id="configBtn" title="Configure board">+</button>
+
+    <div class="board-wrapper">
+        <div class="board" id="board"></div>
+    </div>
+
+    <div class="modal-overlay" id="modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>CONFIGURE BOARD</h2>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="size-row">
+                    <div class="size-field">
+                        <label>Rows</label>
+                        <div class="stepper">
+                            <button class="step-btn" data-target="rowInput" data-dir="-1">&minus;</button>
+                            <input type="number" id="rowInput" min="1" max="12" value="4">
+                            <button class="step-btn" data-target="rowInput" data-dir="1">+</button>
+                        </div>
+                    </div>
+                    <div class="size-field">
+                        <label>Columns</label>
+                        <div class="stepper">
+                            <button class="step-btn" data-target="colInput" data-dir="-1">&minus;</button>
+                            <input type="number" id="colInput" min="1" max="16" value="8">
+                            <button class="step-btn" data-target="colInput" data-dir="1">+</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid-editor" id="gridEditor"></div>
+                <div class="emoji-bar">
+                    <span class="emoji-bar-label">Insert:</span>
+                    <button class="emoji-btn" data-ch="❤">❤</button>
+                    <button class="emoji-btn" data-ch="✈">✈</button>
+                    <button class="emoji-btn" data-ch="★">★</button>
+                    <button class="emoji-btn" data-ch="♥">♥</button>
+                    <button class="emoji-btn" data-ch="☺">☺</button>
+                    <button class="emoji-btn" data-ch="♦">♦</button>
+                    <button class="emoji-btn" data-ch="●">●</button>
+                    <button class="emoji-btn" data-ch="✓">✓</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-cancel" id="cancelBtn">CANCEL</button>
+                <button class="btn btn-apply" id="applyBtn">APPLY</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@&!?';
+        const FLIP_MS = 100;
+        const SPECIAL_CHARS = new Set(['❤','✈','★','♥','☺','♦','●','✓']);
+
+        let rowsData = ['WELCOME ', 'BACK    ', 'HOME    ', 'RAMYA \u2764 '];
+        let numCols  = 8;
+        let animGen  = 0;
+        let tiles    = [];
+
+        const boardEl     = document.getElementById('board');
+        const configBtn   = document.getElementById('configBtn');
+        const modal       = document.getElementById('modal');
+        const modalClose  = document.getElementById('modalClose');
+        const cancelBtn   = document.getElementById('cancelBtn');
+        const applyBtn    = document.getElementById('applyBtn');
+        const rowInput    = document.getElementById('rowInput');
+        const colInput    = document.getElementById('colInput');
+        const gridEditor  = document.getElementById('gridEditor');
+
+        let focusedCell = null;
+
+        // ──────── DOM helpers ────────
+        function mkDiv(cls) {
+            const d = document.createElement('div');
+            d.className = cls;
+            return d;
+        }
+        function mkSpan(ch) {
+            const s = document.createElement('span');
+            s.className = 'tile-char';
+            s.textContent = ch;
+            return s;
+        }
+
+        // ──────── Build / Rebuild Board ────────
+        function buildBoard() {
+            boardEl.innerHTML = '';
+            tiles = [];
+
+            const ratio = (numCols * 0.72 / rowsData.length * 0.94).toFixed(3);
+            boardEl.style.setProperty('--board-ratio', ratio);
+            boardEl.style.gridTemplateColumns = `repeat(${numCols}, 1fr)`;
+
+            for (let r = 0; r < rowsData.length; r++) {
+                tiles[r] = [];
+                for (let c = 0; c < numCols; c++) {
+                    const ch = rowsData[r][c] || ' ';
+                    const t = createTile(ch);
+                    boardEl.appendChild(t.el);
+                    tiles[r][c] = t;
+                }
+            }
+        }
+
+        function createTile(target) {
+            const el = mkDiv('tile');
+            if (SPECIAL_CHARS.has(target)) el.classList.add('heart');
+
+            const topH = mkDiv('tile-half tile-top');
+            const topS = mkSpan(' ');
+            topH.appendChild(topS);
+
+            const botH = mkDiv('tile-half tile-bottom');
+            const botS = mkSpan(' ');
+            botH.appendChild(botS);
+
+            const fT = mkDiv('flap flap-top');
+            const fTS = mkSpan(' ');
+            fT.appendChild(fTS);
+
+            const fB = mkDiv('flap flap-bottom');
+            const fBS = mkSpan(' ');
+            fB.appendChild(fBS);
+
+            el.append(topH, botH, fT, fB);
+
+            return { el, topS, botS, fT, fTS, fB, fBS, cur: ' ', target };
+        }
+
+        // ──────── Animation ────────
+        function flipOnce(tile, newCh, gen) {
+            return new Promise(resolve => {
+                if (gen !== animGen || tile.cur === newCh) { resolve(); return; }
+
+                tile.fTS.textContent = tile.cur;
+                tile.fT.style.display = 'block';
+                tile.fT.classList.remove('flipping');
+                tile.topS.textContent = newCh;
+
+                void tile.fT.offsetWidth;
+                tile.fT.classList.add('flipping');
+
+                setTimeout(() => {
+                    tile.fT.style.display = 'none';
+                    tile.fT.classList.remove('flipping');
+                    if (gen !== animGen) { resolve(); return; }
+
+                    tile.fBS.textContent = newCh;
+                    tile.fB.style.display = 'block';
+                    tile.fB.classList.remove('flipping');
+
+                    void tile.fB.offsetWidth;
+                    tile.fB.classList.add('flipping');
+
+                    setTimeout(() => {
+                        tile.fB.style.display = 'none';
+                        tile.fB.classList.remove('flipping');
+                        tile.botS.textContent = newCh;
+                        tile.cur = newCh;
+                        resolve();
+                    }, FLIP_MS);
+                }, FLIP_MS);
+            });
+        }
+
+        function randChar() {
+            return ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+        }
+        function sleep(ms) {
+            return new Promise(r => setTimeout(r, ms));
+        }
+
+        async function revealTile(tile, delay, gen) {
+            await sleep(delay);
+            if (gen !== animGen || tile.target === ' ') return;
+
+            const total = tiles.flat().filter(t => t.target !== ' ').length;
+            const flips = total > 40 ? 4 : total > 20 ? 6 : 8;
+            const n = flips + Math.floor(Math.random() * flips);
+
+            for (let i = 0; i < n; i++) {
+                if (gen !== animGen) return;
+                await flipOnce(tile, randChar(), gen);
+                await sleep(20 + Math.random() * 35);
+            }
+            if (gen !== animGen) return;
+            await flipOnce(tile, tile.target, gen);
+            tile.el.classList.add('settled');
+        }
+
+        async function clearTile(tile, delay, gen) {
+            await sleep(delay);
+            if (gen !== animGen || tile.cur === ' ') return;
+            tile.el.classList.remove('settled');
+
+            const n = 3 + Math.floor(Math.random() * 4);
+            for (let i = 0; i < n; i++) {
+                if (gen !== animGen) return;
+                await flipOnce(tile, randChar(), gen);
+                await sleep(20 + Math.random() * 35);
+            }
+            if (gen !== animGen) return;
+            await flipOnce(tile, ' ', gen);
+        }
+
+        function startAnimation() {
+            animGen++;
+            const gen = animGen;
+
+            const total = tiles.flat().filter(t => t.target !== ' ').length;
+            const stagger = total > 30 ? 60 : total > 15 ? 90 : 120;
+
+            (async () => {
+                while (gen === animGen) {
+                    const reveals = [];
+                    let d = 0;
+                    for (let r = 0; r < rowsData.length; r++) {
+                        for (let c = 0; c < numCols; c++) {
+                            if (tiles[r][c].target !== ' ') {
+                                reveals.push(revealTile(tiles[r][c], d, gen));
+                                d += stagger;
+                            }
+                        }
+                    }
+                    await Promise.all(reveals);
+                    if (gen !== animGen) return;
+                    await sleep(5000);
+                    if (gen !== animGen) return;
+
+                    const clears = [];
+                    d = 0;
+                    for (let r = rowsData.length - 1; r >= 0; r--) {
+                        for (let c = numCols - 1; c >= 0; c--) {
+                            if (tiles[r][c].cur !== ' ') {
+                                clears.push(clearTile(tiles[r][c], d, gen));
+                                d += Math.min(80, stagger);
+                            }
+                        }
+                    }
+                    await Promise.all(clears);
+                    if (gen !== animGen) return;
+                    await sleep(2500);
+                }
+            })();
+        }
+
+        // ──────── Modal Logic ────────
+        function openModal() {
+            rowInput.value = rowsData.length;
+            colInput.value = numCols;
+            buildEditorGrid();
+            modal.classList.add('open');
+        }
+
+        function closeModal() {
+            modal.classList.remove('open');
+            focusedCell = null;
+        }
+
+        function buildEditorGrid() {
+            const rows = parseInt(rowInput.value) || 1;
+            const cols = parseInt(colInput.value) || 1;
+
+            gridEditor.innerHTML = '';
+            gridEditor.style.gridTemplateColumns = `repeat(${cols}, minmax(28px, 48px))`;
+
+            const inputs = [];
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const inp = document.createElement('input');
+                    inp.type = 'text';
+                    inp.className = 'grid-cell';
+                    inp.maxLength = 2;
+                    inp.autocomplete = 'off';
+                    inp.setAttribute('data-r', r);
+                    inp.setAttribute('data-c', c);
+
+                    const existing = (rowsData[r] || '')[c] || '';
+                    if (existing && existing !== ' ') inp.value = existing;
+
+                    const idx = r * cols + c;
+                    inp.addEventListener('input', () => {
+                        if (inp.value.length > 0) {
+                            const next = inputs[idx + 1];
+                            if (next) next.focus();
+                        }
+                    });
+                    inp.addEventListener('keydown', (e) => {
+                        if (e.key === 'Backspace' && inp.value === '') {
+                            e.preventDefault();
+                            const prev = inputs[idx - 1];
+                            if (prev) { prev.focus(); prev.select(); }
+                        } else if (e.key === 'ArrowRight') {
+                            const next = inputs[idx + 1];
+                            if (next) next.focus();
+                        } else if (e.key === 'ArrowLeft') {
+                            const prev = inputs[idx - 1];
+                            if (prev) prev.focus();
+                        } else if (e.key === 'ArrowDown') {
+                            const below = inputs[idx + cols];
+                            if (below) below.focus();
+                        } else if (e.key === 'ArrowUp') {
+                            const above = inputs[idx - cols];
+                            if (above) above.focus();
+                        }
+                    });
+                    inp.addEventListener('focus', () => { focusedCell = inp; });
+
+                    gridEditor.appendChild(inp);
+                    inputs.push(inp);
+                }
+            }
+
+            if (inputs.length) inputs[0].focus();
+        }
+
+        function applyChanges() {
+            const rows = parseInt(rowInput.value) || 1;
+            const cols = parseInt(colInput.value) || 1;
+            const inputs = gridEditor.querySelectorAll('.grid-cell');
+
+            const newRows = [];
+            for (let r = 0; r < rows; r++) {
+                let row = '';
+                for (let c = 0; c < cols; c++) {
+                    const val = inputs[r * cols + c]?.value || '';
+                    const ch = val.length > 0 ? val[0].toUpperCase() : ' ';
+                    row += ch === ch.toUpperCase() ? ch : ch.toUpperCase();
+                }
+                newRows.push(row);
+            }
+
+            rowsData = newRows;
+            numCols = cols;
+            buildBoard();
+            startAnimation();
+            closeModal();
+        }
+
+        // ──────── Event Listeners ────────
+        configBtn.addEventListener('click', openModal);
+        modalClose.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        applyBtn.addEventListener('click', applyChanges);
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+        });
+
+        document.querySelectorAll('.step-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const input = document.getElementById(btn.dataset.target);
+                const dir = parseInt(btn.dataset.dir);
+                const min = parseInt(input.min);
+                const max = parseInt(input.max);
+                const val = Math.min(max, Math.max(min, (parseInt(input.value) || 1) + dir));
+                input.value = val;
+                buildEditorGrid();
+            });
+        });
+
+        rowInput.addEventListener('change', buildEditorGrid);
+        colInput.addEventListener('change', buildEditorGrid);
+
+        document.querySelectorAll('.emoji-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (focusedCell) {
+                    focusedCell.value = btn.dataset.ch;
+                    focusedCell.dispatchEvent(new Event('input'));
+                    focusedCell.focus();
+                }
+            });
+        });
+
+        // ──────── Init ────────
+        buildBoard();
+        startAnimation();
+    </script>
+</body>
+</html>
