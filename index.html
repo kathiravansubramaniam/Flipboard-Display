@@ -22,6 +22,7 @@
             --divider-shadow: #1a1a1a;
             --divider-highlight: #4a4a4a;
             --board-ratio: 1.35;
+            --flip-speed: 120ms;
         }
 
         html, body {
@@ -203,13 +204,13 @@
         .flap-top .tile-char { top: 0; }
         .flap-top.flipping {
             display: block;
-            animation: flapDown var(--flip-speed, 120ms) ease-in forwards;
+            animation: flapDown var(--flip-speed) ease-in forwards;
         }
         .flap-top.flipping::after {
             content: '';
             position: absolute; inset: 0;
             background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.25));
-            animation: shadowIn var(--flip-speed, 120ms) ease-in forwards;
+            animation: shadowIn var(--flip-speed) ease-in forwards;
         }
 
         .flap-bottom {
@@ -222,7 +223,7 @@
         .flap-bottom .tile-char { bottom: 0; }
         .flap-bottom.flipping {
             display: block;
-            animation: flapUp var(--flip-speed, 120ms) ease-out forwards;
+            animation: flapUp var(--flip-speed) ease-out forwards;
         }
 
         @keyframes flapDown {
@@ -493,7 +494,7 @@
                         <label>Rows</label>
                         <div class="stepper">
                             <button class="step-btn" data-target="rowInput" data-dir="-1">&minus;</button>
-                            <input type="number" id="rowInput" min="1" max="12" value="4">
+                            <input type="number" id="rowInput" min="1" max="12" value="2">
                             <button class="step-btn" data-target="rowInput" data-dir="1">+</button>
                         </div>
                     </div>
@@ -528,10 +529,82 @@
 
     <script>
         const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@&!?';
-        const FLIP_MS = 100;
+        const FLIP_MS = 120;
         const SPECIAL_CHARS = new Set(['❤','✈','★','♥','☺','♦','●','✓']);
 
-        let rowsData = ['WELCOME ', 'BACK    ', 'HOME    ', 'RAMYA \u2764 '];
+        let flipAudioCtx = null;
+        let flipMasterGain = null;
+
+        function ensureFlipAudio() {
+            if (!flipAudioCtx) {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return null;
+                flipAudioCtx = new AC();
+                flipMasterGain = flipAudioCtx.createGain();
+                flipMasterGain.gain.value = 0.42;
+                const comp = flipAudioCtx.createDynamicsCompressor();
+                comp.threshold.value = -18;
+                comp.knee.value = 12;
+                comp.ratio.value = 3;
+                flipMasterGain.connect(comp);
+                comp.connect(flipAudioCtx.destination);
+            }
+            return flipAudioCtx;
+        }
+
+        function resumeFlipAudio() {
+            const ctx = ensureFlipAudio();
+            if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+        }
+
+        function playFlapSnap(phase) {
+            const ctx = ensureFlipAudio();
+            if (!ctx) return;
+            if (ctx.state === 'suspended') return;
+
+            const t0 = ctx.currentTime;
+            const out = flipMasterGain;
+            const startHz = phase === 0 ? 420 : 560;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(startHz, t0);
+            osc.frequency.exponentialRampToValueAtTime(110, t0 + 0.022);
+            gain.gain.setValueAtTime(0.0001, t0);
+            gain.gain.exponentialRampToValueAtTime(phase === 0 ? 0.11 : 0.09, t0 + 0.0015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.048);
+            osc.connect(gain);
+            gain.connect(out);
+            osc.start(t0);
+            osc.stop(t0 + 0.055);
+
+            const noiseDur = Math.floor(ctx.sampleRate * 0.028);
+            const nb = ctx.createBuffer(1, noiseDur, ctx.sampleRate);
+            const nd = nb.getChannelData(0);
+            for (let i = 0; i < noiseDur; i++) {
+                nd[i] = (Math.random() * 2 - 1) * Math.exp(-4 * i / noiseDur);
+            }
+            const ns = ctx.createBufferSource();
+            ns.buffer = nb;
+            const bp = ctx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.value = phase === 0 ? 2400 : 3100;
+            bp.Q.value = 2.2;
+            const ng = ctx.createGain();
+            ng.gain.setValueAtTime(0.0001, t0);
+            ng.gain.exponentialRampToValueAtTime(0.035, t0 + 0.001);
+            ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.025);
+            ns.connect(bp);
+            bp.connect(ng);
+            ng.connect(out);
+            ns.start(t0);
+            ns.stop(t0 + 0.03);
+        }
+
+        let rowsData = [
+            'YOU ARE ',
+            'WELCOME '
+        ];
         let numCols  = 8;
         let animGen  = 0;
         let tiles    = [];
@@ -624,6 +697,8 @@
                     tile.fT.classList.remove('flipping');
                     if (gen !== animGen) { resolve(); return; }
 
+                    playFlapSnap(0);
+
                     tile.fBS.textContent = newCh;
                     tile.fB.style.display = 'block';
                     tile.fB.classList.remove('flipping');
@@ -634,6 +709,7 @@
                     setTimeout(() => {
                         tile.fB.style.display = 'none';
                         tile.fB.classList.remove('flipping');
+                        playFlapSnap(1);
                         tile.botS.textContent = newCh;
                         tile.cur = newCh;
                         resolve();
@@ -817,7 +893,8 @@
         }
 
         // ──────── Event Listeners ────────
-        configBtn.addEventListener('click', openModal);
+        document.addEventListener('pointerdown', resumeFlipAudio, { passive: true });
+        configBtn.addEventListener('click', () => { resumeFlipAudio(); openModal(); });
         modalClose.addEventListener('click', closeModal);
         cancelBtn.addEventListener('click', closeModal);
         applyBtn.addEventListener('click', applyChanges);
