@@ -49,10 +49,14 @@ async function pollRemoteDisplay() {
     try {
         const res = await fetch('/api/display', { cache: 'no-store' });
         if (!res.ok) return;
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) return;
         const data = await res.json();
         if (!data.ok || data.empty || data.updatedAt == null) return;
-        if (lastRemoteUpdatedAt === data.updatedAt) return;
-        lastRemoteUpdatedAt = data.updatedAt;
+        const ts = Number(data.updatedAt);
+        if (Number.isNaN(ts)) return;
+        if (lastRemoteUpdatedAt !== null && lastRemoteUpdatedAt === ts) return;
+        lastRemoteUpdatedAt = ts;
         applyRemoteUpdate(data);
     } catch {
         /* no API (local file) or network error */

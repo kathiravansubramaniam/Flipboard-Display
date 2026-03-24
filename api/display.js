@@ -1,4 +1,4 @@
-const { getDisplayState } = require('../lib/display-store');
+const { getDisplayState, getStorageLabel } = require('../lib/display-store');
 
 module.exports = async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -7,6 +7,7 @@ module.exports = async (req, res) => {
     }
 
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Flipboard-Storage', getStorageLabel());
     const state = await getDisplayState();
     if (!state) {
         res.status(200).json({ ok: true, empty: true });
