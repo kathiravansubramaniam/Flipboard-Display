@@ -1,4 +1,5 @@
 import { SplitFlapAudio } from './splitflap-audio.js';
+import { emojify } from 'https://esm.sh/node-emoji@2.2.0';
 
 const sfx = new SplitFlapAudio({
     sharpness: 0.1,
@@ -64,7 +65,7 @@ function isEmojiCell(s) {
 }
 
 function normalizeCellInput(raw) {
-    const s = (raw || '').trim();
+    const s = emojify((raw || '').trim());
     if (!s) return ' ';
     const g = segmentGraphemes(s);
     const first = g[0] || ' ';

@@ -8,8 +8,15 @@
  */
 const crypto = require('node:crypto');
 const { text } = require('node:stream/consumers');
-const { layoutMessage } = require('../lib/layout-message');
+const { layoutMessage, expandSlackEmoji } = require('../lib/layout-message');
 const { setDisplayState } = require('../lib/display-store');
+
+function escapeSlackText(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
 
 function verifySlackRequest(req, rawBody, signingSecret) {
     const ts = req.headers['x-slack-request-timestamp'];
@@ -82,8 +89,13 @@ module.exports = async (req, res) => {
     };
     await setDisplayState(payload);
 
+    const preview = expandSlackEmoji(textArg);
+    const previewShort =
+        preview.length > 450 ? `${preview.slice(0, 447)}…` : preview;
+    const safePreview = escapeSlackText(previewShort);
+
     json(res, 200, {
         response_type: 'ephemeral',
-        text: `Flipboard set to ${result.numRows}×${result.numCols}. The display will update within a few seconds.`,
+        text: `*Flipboard updated*\n\n*Preview (what will show on the display):*\n${safePreview}\n\n• Grid: ${result.numRows}×${result.numCols}\n• The live site should refresh within a few seconds.`,
     });
 };
