@@ -472,6 +472,27 @@
             color: #fff;
         }
         .btn-apply:hover { background: #d33; }
+
+        .sound-hint {
+            position: fixed;
+            bottom: max(16px, env(safe-area-inset-bottom));
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'DM Sans', system-ui, sans-serif;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.28);
+            z-index: 140;
+            pointer-events: none;
+            transition: opacity 0.45s ease;
+            max-width: 90vw;
+            text-align: center;
+        }
+        .sound-hint.hidden {
+            opacity: 0;
+        }
     </style>
 </head>
 <body>
@@ -481,6 +502,8 @@
     <div class="board-wrapper">
         <div class="board" id="board"></div>
     </div>
+
+    <p class="sound-hint" id="soundHint" aria-live="polite">Tap or click anywhere to enable sound</p>
 
     <div class="modal-overlay" id="modal">
         <div class="modal-card">
@@ -534,71 +557,98 @@
 
         let flipAudioCtx = null;
         let flipMasterGain = null;
+        let flipSilentPrimed = false;
 
-        function ensureFlipAudio() {
-            if (!flipAudioCtx) {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                if (!AC) return null;
-                flipAudioCtx = new AC();
-                flipMasterGain = flipAudioCtx.createGain();
-                flipMasterGain.gain.value = 0.42;
-                const comp = flipAudioCtx.createDynamicsCompressor();
-                comp.threshold.value = -18;
-                comp.knee.value = 12;
-                comp.ratio.value = 3;
-                flipMasterGain.connect(comp);
-                comp.connect(flipAudioCtx.destination);
-            }
+        function createFlipAudioGraph() {
+            if (flipAudioCtx) return flipAudioCtx;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return null;
+            flipAudioCtx = new AC();
+            flipMasterGain = flipAudioCtx.createGain();
+            flipMasterGain.gain.value = 0.55;
+            const comp = flipAudioCtx.createDynamicsCompressor();
+            comp.threshold.value = -16;
+            comp.knee.value = 14;
+            comp.ratio.value = 2.5;
+            flipMasterGain.connect(comp);
+            comp.connect(flipAudioCtx.destination);
             return flipAudioCtx;
         }
 
-        function resumeFlipAudio() {
-            const ctx = ensureFlipAudio();
-            if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+        function primeFlipAudioFromUserGesture() {
+            const ctx = createFlipAudioGraph();
+            if (!ctx) return;
+            const afterRunning = () => {
+                if (!flipSilentPrimed) {
+                    try {
+                        const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+                        const src = ctx.createBufferSource();
+                        src.buffer = buf;
+                        src.connect(flipMasterGain);
+                        src.start(0);
+                    } catch (e) {}
+                    flipSilentPrimed = true;
+                }
+            };
+            if (ctx.state === 'suspended') {
+                ctx.resume().then(afterRunning).catch(() => {});
+            } else {
+                afterRunning();
+            }
         }
 
         function playFlapSnap(phase) {
-            const ctx = ensureFlipAudio();
-            if (!ctx) return;
-            if (ctx.state === 'suspended') return;
-
-            const t0 = ctx.currentTime;
+            if (!flipAudioCtx) return;
+            const ctx = flipAudioCtx;
             const out = flipMasterGain;
-            const startHz = phase === 0 ? 420 : 560;
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(startHz, t0);
-            osc.frequency.exponentialRampToValueAtTime(110, t0 + 0.022);
-            gain.gain.setValueAtTime(0.0001, t0);
-            gain.gain.exponentialRampToValueAtTime(phase === 0 ? 0.11 : 0.09, t0 + 0.0015);
-            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.048);
-            osc.connect(gain);
-            gain.connect(out);
-            osc.start(t0);
-            osc.stop(t0 + 0.055);
+            if (!out) return;
 
-            const noiseDur = Math.floor(ctx.sampleRate * 0.028);
-            const nb = ctx.createBuffer(1, noiseDur, ctx.sampleRate);
-            const nd = nb.getChannelData(0);
-            for (let i = 0; i < noiseDur; i++) {
-                nd[i] = (Math.random() * 2 - 1) * Math.exp(-4 * i / noiseDur);
+            const schedule = () => {
+                if (ctx.state !== 'running') return;
+
+                const t0 = ctx.currentTime;
+                const startHz = phase === 0 ? 420 : 560;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(startHz, t0);
+                osc.frequency.exponentialRampToValueAtTime(110, t0 + 0.022);
+                gain.gain.setValueAtTime(0.0001, t0);
+                gain.gain.exponentialRampToValueAtTime(phase === 0 ? 0.14 : 0.12, t0 + 0.0015);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.048);
+                osc.connect(gain);
+                gain.connect(out);
+                osc.start(t0);
+                osc.stop(t0 + 0.055);
+
+                const noiseDur = Math.floor(ctx.sampleRate * 0.028);
+                const nb = ctx.createBuffer(1, noiseDur, ctx.sampleRate);
+                const nd = nb.getChannelData(0);
+                for (let i = 0; i < noiseDur; i++) {
+                    nd[i] = (Math.random() * 2 - 1) * Math.exp(-4 * i / noiseDur);
+                }
+                const ns = ctx.createBufferSource();
+                ns.buffer = nb;
+                const bp = ctx.createBiquadFilter();
+                bp.type = 'bandpass';
+                bp.frequency.value = phase === 0 ? 2400 : 3100;
+                bp.Q.value = 2.2;
+                const ng = ctx.createGain();
+                ng.gain.setValueAtTime(0.0001, t0);
+                ng.gain.exponentialRampToValueAtTime(0.045, t0 + 0.001);
+                ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.025);
+                ns.connect(bp);
+                bp.connect(ng);
+                ng.connect(out);
+                ns.start(t0);
+                ns.stop(t0 + 0.03);
+            };
+
+            if (ctx.state === 'suspended') {
+                ctx.resume().then(schedule).catch(() => {});
+            } else {
+                schedule();
             }
-            const ns = ctx.createBufferSource();
-            ns.buffer = nb;
-            const bp = ctx.createBiquadFilter();
-            bp.type = 'bandpass';
-            bp.frequency.value = phase === 0 ? 2400 : 3100;
-            bp.Q.value = 2.2;
-            const ng = ctx.createGain();
-            ng.gain.setValueAtTime(0.0001, t0);
-            ng.gain.exponentialRampToValueAtTime(0.035, t0 + 0.001);
-            ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.025);
-            ns.connect(bp);
-            bp.connect(ng);
-            ng.connect(out);
-            ns.start(t0);
-            ns.stop(t0 + 0.03);
         }
 
         let rowsData = [
@@ -893,8 +943,20 @@
         }
 
         // ──────── Event Listeners ────────
-        document.addEventListener('pointerdown', resumeFlipAudio, { passive: true });
-        configBtn.addEventListener('click', () => { resumeFlipAudio(); openModal(); });
+        function unlockAudioOnInteraction() {
+            primeFlipAudioFromUserGesture();
+            const hint = document.getElementById('soundHint');
+            if (hint) hint.classList.add('hidden');
+        }
+        document.addEventListener('pointerdown', unlockAudioOnInteraction, { passive: true });
+        document.addEventListener('touchstart', unlockAudioOnInteraction, { passive: true });
+        document.addEventListener('click', unlockAudioOnInteraction, { passive: true });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && flipAudioCtx && flipAudioCtx.state === 'suspended') {
+                flipAudioCtx.resume().catch(() => {});
+            }
+        });
+        configBtn.addEventListener('click', openModal);
         modalClose.addEventListener('click', closeModal);
         cancelBtn.addEventListener('click', closeModal);
         applyBtn.addEventListener('click', applyChanges);
