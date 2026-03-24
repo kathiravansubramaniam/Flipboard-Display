@@ -11,8 +11,70 @@ const SPECIAL_CHARS = new Set(['❤', '✈', '★', '♥', '☺', '♦', '●', 
 
 let audioEnabled = localStorage.getItem('flipboardAudioEnabled') !== '0';
 
-let rowsData = ['YOU ARE ', 'WELCOME '];
-let numCols = 8;
+function segmentGraphemes(s) {
+    const str = typeof s === 'string' ? s : '';
+    try {
+        const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+        return [...seg.segment(str)].map((x) => x.segment);
+    } catch {
+        return [...str];
+    }
+}
+
+function padCellArray(cells, cols) {
+    const row = (cells || []).slice(0, cols);
+    while (row.length < cols) row.push(' ');
+    return row;
+}
+
+function normalizeLegacyStringRows(rows) {
+    if (!rows?.length) return [padCellArray([' '], 1)];
+    const widths = rows.map((r) => segmentGraphemes(r).length);
+    const cols = Math.min(16, Math.max(1, ...widths));
+    return rows.map((r) => padCellArray(segmentGraphemes(r), cols));
+}
+
+function normalizeRowsData(rd, numColsHint) {
+    if (!Array.isArray(rd) || rd.length === 0) return [[' ']];
+    if (typeof rd[0] === 'string') {
+        const cols =
+            numColsHint ??
+            Math.max(
+                ...rd.map((r) => segmentGraphemes(String(r)).length),
+                1
+            );
+        return rd.map((row) => padCellArray(segmentGraphemes(String(row)), cols));
+    }
+    const cols =
+        numColsHint ??
+        Math.max(...rd.map((row) => (Array.isArray(row) ? row.length : 0)), 1);
+    return rd.map((row) => {
+        const cells = Array.isArray(row)
+            ? row.map((c) => (c == null || c === '' ? ' ' : String(c)))
+            : segmentGraphemes(String(row));
+        return padCellArray(cells, cols);
+    });
+}
+
+function isEmojiCell(s) {
+    if (!s || s === ' ') return false;
+    if (SPECIAL_CHARS.has(s)) return true;
+    if (/^[A-Z0-9#@&!?]$/i.test(s)) return false;
+    return /\p{Extended_Pictographic}/u.test(s) || s.length > 1;
+}
+
+function normalizeCellInput(raw) {
+    const s = (raw || '').trim();
+    if (!s) return ' ';
+    const g = segmentGraphemes(s);
+    const first = g[0] || ' ';
+    if (first === ' ') return ' ';
+    if (/^[A-Z0-9#@&!?]$/i.test(first)) return first.toUpperCase();
+    return first;
+}
+
+let rowsData = normalizeLegacyStringRows(['YOU ARE ', 'WELCOME ']);
+let numCols = rowsData[0]?.length ?? 8;
 let animGen = 0;
 let tiles = [];
 
@@ -34,11 +96,11 @@ let lastRemoteUpdatedAt = null;
 
 function applyRemoteUpdate(data) {
     if (!data || !Array.isArray(data.rowsData) || data.rowsData.length === 0) return;
-    rowsData = data.rowsData;
+    rowsData = normalizeRowsData(data.rowsData, data.numCols);
     numCols =
         typeof data.numCols === 'number'
             ? data.numCols
-            : data.rowsData[0]?.length || numCols;
+            : rowsData[0]?.length || numCols;
     if (rowInput) rowInput.value = rowsData.length;
     if (colInput) colInput.value = numCols;
     buildBoard();
@@ -117,7 +179,7 @@ function buildBoard() {
     for (let r = 0; r < rowsData.length; r++) {
         tiles[r] = [];
         for (let c = 0; c < numCols; c++) {
-            const ch = rowsData[r][c] || ' ';
+            const ch = rowsData[r]?.[c] ?? ' ';
             const t = createTile(ch);
             boardEl.appendChild(t.el);
             tiles[r][c] = t;
@@ -127,7 +189,7 @@ function buildBoard() {
 
 function createTile(target) {
     const el = mkDiv('tile');
-    if (SPECIAL_CHARS.has(target)) el.classList.add('heart');
+    if (isEmojiCell(target)) el.classList.add('tile-emoji');
 
     const topH = mkDiv('tile-half tile-top');
     const topS = mkSpan(' ');
@@ -304,12 +366,12 @@ function buildEditorGrid() {
             const inp = document.createElement('input');
             inp.type = 'text';
             inp.className = 'grid-cell';
-            inp.maxLength = 2;
+            inp.maxLength = 32;
             inp.autocomplete = 'off';
             inp.setAttribute('data-r', r);
             inp.setAttribute('data-c', c);
 
-            const existing = (rowsData[r] || '')[c] || '';
+            const existing = rowsData[r]?.[c] ?? '';
             if (existing && existing !== ' ') inp.value = existing;
 
             const idx = r * cols + c;
@@ -360,11 +422,10 @@ function applyChanges() {
 
     const newRows = [];
     for (let r = 0; r < rows; r++) {
-        let row = '';
+        const row = [];
         for (let c = 0; c < cols; c++) {
             const val = inputs[r * cols + c]?.value || '';
-            const ch = val.length > 0 ? val[0].toUpperCase() : ' ';
-            row += ch === ch.toUpperCase() ? ch : ch.toUpperCase();
+            row.push(normalizeCellInput(val));
         }
         newRows.push(row);
     }
