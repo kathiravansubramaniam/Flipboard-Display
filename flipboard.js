@@ -29,6 +29,36 @@ const soundTextLabel = document.getElementById('soundTextLabel');
 
 let focusedCell = null;
 
+const REMOTE_POLL_MS = 3500;
+let lastRemoteUpdatedAt = null;
+
+function applyRemoteUpdate(data) {
+    if (!data || !Array.isArray(data.rowsData) || data.rowsData.length === 0) return;
+    rowsData = data.rowsData;
+    numCols =
+        typeof data.numCols === 'number'
+            ? data.numCols
+            : data.rowsData[0]?.length || numCols;
+    if (rowInput) rowInput.value = rowsData.length;
+    if (colInput) colInput.value = numCols;
+    buildBoard();
+    startAnimation();
+}
+
+async function pollRemoteDisplay() {
+    try {
+        const res = await fetch('/api/display', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.ok || data.empty || data.updatedAt == null) return;
+        if (lastRemoteUpdatedAt === data.updatedAt) return;
+        lastRemoteUpdatedAt = data.updatedAt;
+        applyRemoteUpdate(data);
+    } catch {
+        /* no API (local file) or network error */
+    }
+}
+
 function updateSoundTextLabel() {
     if (!soundTextLabel) return;
     soundTextLabel.textContent = audioEnabled
@@ -403,3 +433,5 @@ document.querySelectorAll('.emoji-btn').forEach((btn) => {
 updateSoundTextLabel();
 buildBoard();
 startAnimation();
+setInterval(pollRemoteDisplay, REMOTE_POLL_MS);
+void pollRemoteDisplay();

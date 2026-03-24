@@ -1,0 +1,7 @@
+{
+  "name": "flipboard-display",
+  "private": true,
+  "dependencies": {
+    "@upstash/redis": "^1.35.0"
+  }
+}
