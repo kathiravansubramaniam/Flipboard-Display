@@ -1,4 +1,4 @@
-# Flipboard Display
+# Flipboard
 
 Airport-style split-flap (Solari) board animation in the browser. Configure grid size and characters from the **+** button.
 
