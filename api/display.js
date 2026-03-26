@@ -14,6 +14,8 @@ module.exports = async (req, res) => {
         res.status(200).json({
             ok: true,
             empty: true,
+            cycleId: 0,
+            queueLength: 0,
             storage,
             hint:
                 storage === 'redis'
@@ -27,6 +29,8 @@ module.exports = async (req, res) => {
         ok: true,
         empty: false,
         storage,
+        cycleId: state.cycleId ?? 0,
+        queueLength: state.queueLength ?? 0,
         updatedAt: state.updatedAt,
         rowsData: state.rowsData,
         numCols: state.numCols,

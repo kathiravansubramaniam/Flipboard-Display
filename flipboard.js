@@ -94,9 +94,13 @@ let focusedCell = null;
 
 const REMOTE_POLL_MS = 3500;
 let lastRemoteUpdatedAt = null;
+/** Server cycle id; advance() must match to pop the FIFO queue after each flip cycle */
+let remoteCycleId = null;
 
 function applyRemoteUpdate(data) {
     if (!data || !Array.isArray(data.rowsData) || data.rowsData.length === 0) return;
+    if (data.cycleId != null) remoteCycleId = Number(data.cycleId);
+    if (data.updatedAt != null) lastRemoteUpdatedAt = Number(data.updatedAt);
     rowsData = normalizeRowsData(data.rowsData, data.numCols);
     numCols =
         typeof data.numCols === 'number'
@@ -108,6 +112,38 @@ function applyRemoteUpdate(data) {
     startAnimation();
 }
 
+async function requestAdvanceAfterCycle(gen) {
+    if (gen !== animGen) return;
+    if (remoteCycleId === null) return;
+    try {
+        const res = await fetch('/api/display/advance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cycleId: remoteCycleId }),
+        });
+        if (!res.ok) return;
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) return;
+        const data = await res.json();
+        if (!data.ok) return;
+        if (data.empty) return;
+        if (data.cycleId != null) remoteCycleId = Number(data.cycleId);
+        if (data.updatedAt != null) lastRemoteUpdatedAt = Number(data.updatedAt);
+        if (data.contentChanged && data.rowsData) {
+            rowsData = normalizeRowsData(data.rowsData, data.numCols);
+            numCols =
+                typeof data.numCols === 'number'
+                    ? data.numCols
+                    : rowsData[0]?.length || numCols;
+            if (rowInput) rowInput.value = rowsData.length;
+            if (colInput) colInput.value = numCols;
+            buildBoard();
+        }
+    } catch {
+        /* offline */
+    }
+}
+
 async function pollRemoteDisplay() {
     try {
         const res = await fetch('/api/display', { cache: 'no-store' });
@@ -115,12 +151,22 @@ async function pollRemoteDisplay() {
         const ct = res.headers.get('content-type') || '';
         if (!ct.includes('application/json')) return;
         const data = await res.json();
-        if (!data.ok || data.empty || data.updatedAt == null) return;
+        if (!data.ok || data.empty || !data.rowsData) return;
+        if (data.cycleId == null || data.updatedAt == null) return;
+        const cid = Number(data.cycleId);
         const ts = Number(data.updatedAt);
         if (Number.isNaN(ts)) return;
-        if (lastRemoteUpdatedAt !== null && lastRemoteUpdatedAt === ts) return;
-        lastRemoteUpdatedAt = ts;
-        applyRemoteUpdate(data);
+        if (remoteCycleId === null) {
+            remoteCycleId = cid;
+            lastRemoteUpdatedAt = ts;
+            applyRemoteUpdate(data);
+            return;
+        }
+        if (cid !== remoteCycleId || ts !== lastRemoteUpdatedAt) {
+            remoteCycleId = cid;
+            lastRemoteUpdatedAt = ts;
+            applyRemoteUpdate(data);
+        }
     } catch {
         /* no API (local file) or network error */
     }
@@ -338,6 +384,8 @@ function startAnimation() {
             await Promise.all(clears);
             if (gen !== animGen) return;
             await sleep(2500);
+            if (gen !== animGen) return;
+            await requestAdvanceAfterCycle(gen);
         }
     })();
 }
@@ -496,8 +544,27 @@ document.querySelectorAll('.emoji-btn').forEach((btn) => {
     });
 });
 
-updateSoundTextLabel();
-buildBoard();
-startAnimation();
-setInterval(pollRemoteDisplay, REMOTE_POLL_MS);
-void pollRemoteDisplay();
+async function bootstrap() {
+    updateSoundTextLabel();
+    try {
+        const res = await fetch('/api/display', { cache: 'no-store' });
+        if (res.ok) {
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('application/json')) {
+                const data = await res.json();
+                if (data.ok && !data.empty && data.rowsData?.length) {
+                    applyRemoteUpdate(data);
+                    setInterval(pollRemoteDisplay, REMOTE_POLL_MS);
+                    return;
+                }
+            }
+        }
+    } catch {
+        /* offline or static file */
+    }
+    buildBoard();
+    startAnimation();
+    setInterval(pollRemoteDisplay, REMOTE_POLL_MS);
+}
+
+void bootstrap();

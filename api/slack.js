@@ -9,7 +9,7 @@
 const crypto = require('node:crypto');
 const { text } = require('node:stream/consumers');
 const { layoutMessage, expandSlackEmoji } = require('../lib/layout-message');
-const { setDisplayState } = require('../lib/display-store');
+const { enqueueDisplay, getDisplayState } = require('../lib/display-store');
 
 function escapeSlackText(s) {
     return String(s)
@@ -87,15 +87,22 @@ module.exports = async (req, res) => {
         source: 'slack',
         rawText: textArg.slice(0, 500),
     };
-    await setDisplayState(payload);
+    await enqueueDisplay(payload);
 
+    const st = await getDisplayState();
+    const ql = st?.queueLength ?? 0;
     const preview = expandSlackEmoji(textArg);
     const previewShort =
         preview.length > 450 ? `${preview.slice(0, 447)}…` : preview;
     const safePreview = escapeSlackText(previewShort);
 
+    const queueLine =
+        ql > 0
+            ? `• *Queue:* ${ql} message(s) waiting after the one currently on the flipboard.`
+            : '• *Queue:* Your message will show after the current flip cycle completes (nothing else is waiting).';
+
     json(res, 200, {
         response_type: 'ephemeral',
-        text: `*Flipboard updated*\n\n*Preview (what will show on the display):*\n${safePreview}\n\n• Grid: ${result.numRows}×${result.numCols}\n• The live site should refresh within a few seconds.`,
+        text: `*Flipboard*\n\n*Preview (as it will appear):*\n${safePreview}\n\n• Grid: ${result.numRows}×${result.numCols}\n${queueLine}`,
     });
 };
