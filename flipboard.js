@@ -10,7 +10,7 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@&!?';
 const FLIP_MS = 120;
 const SPECIAL_CHARS = new Set(['❤', '✈', '★', '♥', '☺', '♦', '●', '✓']);
 
-let audioEnabled = localStorage.getItem('flipboardAudioEnabled') !== '0';
+let audioEnabled = localStorage.getItem('flipboardAudioEnabled') === '1';
 
 function segmentGraphemes(s) {
     const str = typeof s === 'string' ? s : '';
